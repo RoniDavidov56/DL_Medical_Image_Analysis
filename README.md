@@ -1,8 +1,8 @@
-# ConvLSTM U-Net Architectures for Time-Lapse Cell Segmentation
+# Comparative Evaluation of U-Net-Based Architectures for Time-Lapse Cell Segmentation
 
-This repository compares three deep-learning architectures for cell segmentation in time-lapse fluorescence microscopy. Each model combines a U-Net-style encoder-decoder with **Convolutional LSTM (ConvLSTM)** layers, allowing the network to learn both spatial information within each frame and temporal information across consecutive frames.
+This repository compares three U-Net-based deep-learning configurations for cell segmentation in time-lapse fluorescence microscopy. The study uses a common sequence-segmentation framework and evaluates how attention gates and residual blocks affect spatial feature extraction, boundary preservation, and cell detection.
 
-The project evaluates the following architectures under the same dataset and training conditions:
+The project evaluates the following configurations under the same dataset and training conditions:
 
 1. **LSTM-U-Net** — the baseline architecture.
 2. **LSTM-U-Net with Attention** — adds spatial attention gates to the skip connections.
@@ -201,6 +201,12 @@ The metric considers whether each ground-truth cell is correctly detected and me
 ## Results
 
 The following mean SEG scores were obtained on the 20-frame test set:
+
+### Example Segmentation Results
+
+![Instance segmentation comparison across the ground-truth mask, baseline U-Net configuration, attention-based configuration, and residual configuration](images/segmentation_comparison.png)
+
+*Example instance-segmentation outputs on a test frame. Each color represents a separate predicted cell instance.*
 
 | Model | Mean SEG score |
 |---|---:|
