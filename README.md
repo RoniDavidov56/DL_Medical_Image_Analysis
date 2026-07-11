@@ -258,18 +258,13 @@ Because the dataset is relatively small and homogeneous, the reported results sh
 
 ## Future Work
 
-Potential improvements include:
+Potential extensions include:
 
-- training for substantially more iterations;
-- performing systematic hyperparameter optimization;
+- training the models for more iterations;
 - evaluating additional Cell Tracking Challenge datasets;
 - improving the separation of touching cells;
-- tuning class weights and decision thresholds;
-- refining predicted boundaries;
-- comparing computational cost and inference time;
-- combining residual blocks and attention gates in a single **LSTM-ResU-Net with Attention** architecture.
-
-A combined architecture may potentially use the stronger faint-cell detection of LSTM-ResU-Net together with the smoother boundary localization of the attention model.
+- performing systematic hyperparameter tuning;
+- combining residual blocks and attention gates in a single architecture.
 
 ## Requirements
 
