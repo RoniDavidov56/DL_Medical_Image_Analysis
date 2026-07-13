@@ -1,159 +1,302 @@
-# Comparative Evaluation of U-Net-Based Architectures for Time-Lapse Cell Segmentation
+<div align="center">
 
-This repository compares three U-Net-based deep-learning configurations for cell segmentation in time-lapse fluorescence microscopy. The study uses a common sequence-segmentation framework and evaluates how attention gates and residual blocks affect spatial feature extraction, boundary preservation, and cell detection.
+# Spatiotemporal Cell Segmentation in Time-Lapse Microscopy
 
-The project evaluates the following configurations under the same dataset and training conditions:
+### Comparative evaluation of ConvLSTM–U-Net architectures with attention and residual learning
 
-1. **LSTM-U-Net** — the baseline architecture.
-2. **LSTM-U-Net with Attention** — adds spatial attention gates to the skip connections.
-3. **LSTM-ResU-Net** — replaces standard convolutional blocks with residual blocks.
+[![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-FF6F00?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
+[![Keras](https://img.shields.io/badge/Keras-Deep%20Learning-D00000?logo=keras&logoColor=white)](https://keras.io/)
+[![Task](https://img.shields.io/badge/Task-Instance%20Segmentation-6A5ACD)](#evaluation)
+[![Data](https://img.shields.io/badge/Dataset-Fluo--N2DH--GOWT1-2E8B57)](#dataset)
+[![Status](https://img.shields.io/badge/Status-Proof%20of%20Concept-555555)](#limitations)
 
-## Project Objective
+**A controlled comparison of three sequence-aware segmentation models for detecting and separating cells in fluorescence microscopy videos.**
 
-Cell segmentation in time-lapse microscopy is challenging because cells may overlap, appear with low contrast, change shape, enter or leave the field of view, or have weak and unclear boundaries.
+[Overview](#overview) ·
+[Architectures](#architectures) ·
+[Dataset](#dataset) ·
+[Results](#results) ·
+[Getting Started](#getting-started) ·
+[Limitations](#limitations)
 
-Processing each frame independently can lead to inconsistent segmentation across time. The ConvLSTM component addresses this limitation by using information from consecutive frames, while the U-Net component extracts spatial features and reconstructs the segmentation masks.
+</div>
 
-The purpose of the project is to examine whether upgrading the spatial component of the baseline LSTM-U-Net improves cell detection, boundary preservation, and instance segmentation quality.
+---
 
-## Repository Files
+## At a Glance
 
-```text
-.
-├── lstm_u_net_baseline.py
-├── lstm_u_net_+_attention.py
-├── lstm_resunet.py
-└── README.md
+This repository investigates whether modifications to the **spatial feature-extraction component** of a ConvLSTM–U-Net improve cell segmentation in time-lapse fluorescence microscopy.
+
+Three architectures were trained under the same proof-of-concept conditions:
+
+| Model | Core idea | Mean SEG |
+|---|---|---:|
+| **LSTM–U-Net** | Baseline encoder–decoder with ConvLSTM temporal modeling | 0.5062 |
+| **LSTM–U-Net + Attention** | Attention gates filter skip-connection features | 0.5171 |
+| **LSTM–ResU-Net** | Residual blocks replace standard convolution blocks | **0.5607** |
+
+> **Main result:** under the selected experimental setup, **LSTM–ResU-Net achieved the highest mean SEG score** and detected more faint cell instances. The attention model produced smoother boundaries but missed some low-contrast cells.
+
+---
+
+## Example Segmentation Output
+
+<p align="center">
+  <img src="images/segmentation_comparison.png"
+       alt="Ground-truth and predicted instance masks produced by the three evaluated models"
+       width="100%">
+</p>
+
+<p align="center">
+  <em>
+    Ground-truth instance mask compared with predictions from the baseline,
+    attention-based, and residual architectures. Each color represents a
+    separate cell instance.
+  </em>
+</p>
+
+---
+
+## Overview
+
+Segmenting cells across time is more difficult than segmenting isolated images. Cells may:
+
+- move between frames;
+- change shape and intensity;
+- overlap or touch neighboring cells;
+- enter or leave the field of view;
+- appear with weak contrast or unclear boundaries;
+- be incorrectly merged into a single predicted object.
+
+A frame-independent model does not explicitly preserve information from previous observations. This project therefore combines:
+
+- **U-Net**, for multi-scale spatial feature extraction and mask reconstruction;
+- **ConvLSTM**, for learning temporal relationships between consecutive microscopy frames.
+
+The experiment focuses on a specific research question:
+
+> Does improving the U-Net spatial pathway with attention gates or residual blocks improve temporal cell segmentation when the ConvLSTM component is kept conceptually consistent?
+
+---
+
+## Experimental Workflow
+
+```mermaid
+flowchart LR
+    A[Time-lapse microscopy frames] --> B[Per-frame z-score normalization]
+    B --> C[Four-frame sequences]
+    C --> D[128 × 128 training crops]
+    D --> E1[LSTM–U-Net]
+    D --> E2[LSTM–U-Net + Attention]
+    D --> E3[LSTM–ResU-Net]
+    E1 --> F[Three-class probability maps]
+    E2 --> F
+    E3 --> F
+    F --> G[Post-processing]
+    G --> H[Instance-labeled masks]
+    H --> I[SEG evaluation]
 ```
 
-| File | Architecture | Main modification |
-|---|---|---|
-| `lstm_u_net_baseline.py` | LSTM-U-Net | Baseline encoder-decoder with ConvLSTM layers and standard skip connections |
-| `lstm_u_net_+_attention.py` | LSTM-U-Net with Attention | Spatial attention gates filter encoder features before decoder fusion |
-| `lstm_resunet.py` | LSTM-ResU-Net | Standard convolutional blocks are replaced with residual blocks |
+---
 
 ## Architectures
 
-### 1. LSTM-U-Net Baseline
+### 1. LSTM–U-Net Baseline
 
-The baseline follows a U-shaped encoder-decoder architecture with skip connections and ConvLSTM-based temporal feature extraction.
+**File:** `lstm_u_net_baseline.py`
 
-The encoder extracts multi-scale spatial features from each frame. ConvLSTM layers model temporal relationships across the sequence, and the decoder reconstructs a segmentation map for every frame.
+The baseline uses a U-shaped encoder–decoder network with skip connections and ConvLSTM-based temporal feature extraction.
+
+```text
+Input sequence
+      │
+      ▼
+Multi-scale encoder
+      │
+      ▼
+ConvLSTM temporal representation
+      │
+      ▼
+Decoder + skip connections
+      │
+      ▼
+Three-class segmentation map
+```
 
 Main components:
 
-- multi-level encoder-decoder structure;
-- ConvLSTM layers for temporal feature extraction;
-- encoder-decoder skip connections;
+- hierarchical encoder–decoder structure;
+- ConvLSTM layers for temporal context;
+- standard encoder-to-decoder skip connections;
 - batch normalization;
-- Leaky ReLU activations;
+- Leaky ReLU activation;
 - bilinear upsampling;
 - three-class softmax output.
 
-### 2. LSTM-U-Net with Attention
+---
 
-This model adds a spatial attention gate to each encoder-decoder skip connection. Each gate receives features from the encoder and a gating signal from the decoder, computes an attention map, and filters the skip features before concatenation.
+### 2. LSTM–U-Net with Attention
+
+**File:** `lstm_u_net_+_attention.py`
+
+This model adds an attention gate to each skip connection. The gate uses encoder features and a decoder-side gating signal to determine which spatial regions should contribute to reconstruction.
+
+```mermaid
+flowchart LR
+    E[Encoder features] --> A[Attention gate]
+    G[Decoder gating signal] --> A
+    A --> F[Filtered skip features]
+    F --> C[Decoder concatenation]
+```
 
 The attention mechanism is intended to:
 
 - emphasize relevant cell regions;
-- suppress irrelevant background features;
-- reduce false-positive detections caused by background noise;
-- preserve smoother and more accurate boundaries in crowded scenes.
+- suppress background activations;
+- reduce false-positive detections;
+- improve boundaries in crowded scenes;
+- focus decoder reconstruction on informative features.
 
-The ConvLSTM component remains unchanged so that temporal modeling is consistent with the baseline.
+The temporal ConvLSTM component remains conceptually aligned with the baseline to support a focused comparison.
 
-### 3. LSTM-ResU-Net
+---
 
-This model replaces the standard convolutional blocks in the encoder and decoder with residual blocks. A residual shortcut adds the block input to its processed output, improving information and gradient flow through the network.
+### 3. LSTM–ResU-Net
 
-The residual design is intended to:
+**File:** `lstm_resunet.py`
 
-- preserve small structures and thin boundaries;
+This architecture replaces standard convolution blocks with residual blocks.
+
+```text
+Input ────────────────┐
+  │                   │
+  ▼                   │
+Conv → Norm → Act → Conv
+  │                   │
+  └──────── Add ◄─────┘
+              │
+              ▼
+           Output
+```
+
+Residual connections are intended to:
+
+- improve gradient and information flow;
+- preserve fine structures and thin boundaries;
 - reduce excessive smoothing;
-- improve learning in deeper feature-extraction stages;
+- support deeper feature extraction;
 - improve the detection of faint cells;
-- support better separation of nearby cells.
+- retain useful low-level information.
 
-The ConvLSTM component remains unchanged to preserve the temporal behavior of the original architecture.
+---
+
+## Architecture Comparison
+
+| Property | LSTM–U-Net | + Attention | ResU-Net |
+|---|:---:|:---:|:---:|
+| ConvLSTM temporal modeling | ✓ | ✓ | ✓ |
+| U-shaped encoder–decoder | ✓ | ✓ | ✓ |
+| Standard skip connections | ✓ | Filtered | ✓ |
+| Attention gates | — | ✓ | — |
+| Residual blocks | — | — | ✓ |
+| Three-class softmax output | ✓ | ✓ | ✓ |
+| Primary expected benefit | Baseline balance | Spatial focus | Feature preservation |
+
+---
 
 ## Dataset
 
-The project uses the **Fluo-N2DH-GOWT1** dataset from the [Cell Tracking Challenge](https://celltrackingchallenge.net/2d-datasets/).
+The project uses the **Fluo-N2DH-GOWT1** dataset from the
+[Cell Tracking Challenge](https://celltrackingchallenge.net/2d-datasets/).
 
-The dataset contains time-lapse fluorescence microscopy sequences of GFP-GOWT1 mouse stem cells. Each frame has a corresponding segmentation mask.
+The sequence contains fluorescence microscopy images of GFP-GOWT1 mouse stem cells together with corresponding segmentation annotations.
 
-Only this cell type was used in the project as a proof of concept.
+Only this dataset was used in the current proof-of-concept experiment.
 
-### Dataset Split
+### Temporal Split
 
-The frames were divided into three temporally continuous, non-overlapping subsets:
+The frames were divided into temporally continuous, non-overlapping subsets:
 
-| Subset | Number of frames |
+| Subset | Frames |
 |---|---:|
 | Training | 92 |
 | Validation | 72 |
 | Test | 20 |
 
-Temporal continuity was preserved within each subset. Separate time ranges were used for training, validation, and testing to reduce temporal leakage between the sets.
+Maintaining separate contiguous time ranges reduces direct temporal leakage between training, validation, and test data.
 
-## Preprocessing
+---
 
-Each microscopy frame was normalized independently using z-score normalization:
+## Preprocessing and Augmentation
 
-```text
-normalized_image = (image - mean) / standard_deviation
+### Normalization
+
+Each frame is normalized independently using z-score normalization:
+
+```math
+x_{\mathrm{norm}} = \frac{x-\mu_x}{\sigma_x}
 ```
 
-This produces a more consistent intensity distribution across frames and improves training stability.
+where:
 
-Training samples were created from sequences of consecutive frames and cropped into fixed-size image patches.
+- \(x\) is the original frame;
+- \(\mu_x\) is its mean intensity;
+- \(\sigma_x\) is its intensity standard deviation.
 
-### Data Augmentation
+### Sequence Construction
 
-Augmentations were applied only to the training data.
-
-Spatial augmentations include:
-
-- random cropping;
-- horizontal and vertical flipping;
-- rotations in multiples of 90 degrees;
-- elastic deformation;
-- affine transformation;
-- random brightness adjustment;
-- random contrast adjustment.
-
-Temporal augmentations include:
-
-- random reversal of frame order;
-- temporal subsampling of the sequence.
-
-## Model Input and Output
-
-Each training sample contains a sequence of **four consecutive frames**. Every frame is cropped to:
+Each model input contains:
 
 ```text
-128 × 128 pixels
+4 consecutive frames × 128 × 128 pixels
 ```
 
-Depending on the selected configuration, tensors may use one of the following layouts:
+Depending on the selected data format, tensors may be represented as:
 
 ```text
 NCHW: [batch, time, channels, height, width]
 NHWC: [batch, time, height, width, channels]
 ```
 
-The network predicts three segmentation classes:
+### Training Augmentation
 
-```text
-0 — background
-1 — cell interior
-2 — cell contour / boundary
-```
+Spatial augmentation:
+
+- random crops;
+- horizontal and vertical flips;
+- rotations in multiples of 90°;
+- elastic deformation;
+- affine transformations;
+- random brightness adjustment;
+- random contrast adjustment.
+
+Temporal augmentation:
+
+- reversal of frame order;
+- temporal subsampling.
+
+Augmentation is applied only to the training data.
+
+---
+
+## Model Output
+
+The network predicts one class per pixel:
+
+| Class | Meaning |
+|---:|---|
+| 0 | Background |
+| 1 | Cell interior |
+| 2 | Cell contour / boundary |
+
+The contour class helps the post-processing pipeline distinguish adjacent cells that would otherwise be merged.
+
+---
 
 ## Training Configuration
 
-All three models were trained using the same dataset split, preprocessing pipeline, augmentation settings, and general training conditions to support a fair comparison.
+All architectures were evaluated under the same general setup:
 
 | Parameter | Value |
 |---|---|
@@ -164,159 +307,206 @@ All three models were trained using the same dataset split, preprocessing pipeli
 | Crop size | `128 × 128` |
 | Training iterations | 1,000 |
 | Validation interval | Every 100 iterations |
-| Output classes | Background, cell interior, cell contour |
+| Output classes | Background, cell interior, contour |
 
-The original reference work used a substantially longer training schedule. The shorter 1,000-iteration setup used here was selected for a proof-of-concept comparison under limited computational resources.
+The shorter training schedule was selected for a controlled proof-of-concept comparison under limited computational resources. The results should therefore not be interpreted as fully optimized benchmark performance.
+
+---
 
 ## Loss Function
 
-Training uses a **weighted categorical cross-entropy loss** for the three segmentation classes.
+Training uses **weighted categorical cross-entropy**.
 
-Class weighting helps address the imbalance between the large background area and the smaller cell-interior and cell-boundary regions. It also allows additional importance to be assigned to cell contours, which are essential for separating adjacent instances.
+Class weights reduce the dominance of background pixels and allow greater importance to be assigned to cell interiors and boundaries.
 
-Invalid or unlabeled pixels can be excluded from the loss calculation.
+Conceptually:
+
+```math
+\mathcal{L}
+=
+-\frac{1}{N}
+\sum_{i=1}^{N}
+m_i\,w_{y_i}\,
+\log p_{i,y_i}
+```
+
+where:
+
+- \(p_{i,y_i}\) is the predicted probability of the correct class;
+- \(w_{y_i}\) is the weight of that class;
+- \(m_i\) excludes invalid or unlabeled pixels;
+- \(N\) is the number of valid pixels.
+
+---
 
 ## Inference and Post-processing
 
-During inference, the model produces a softmax probability map for each class. The prediction pipeline includes:
+The inference pipeline converts softmax predictions into instance-labeled cell masks.
 
-1. loading a trained checkpoint;
-2. preprocessing the input image sequence;
-3. predicting class probabilities;
-4. thresholding the cell-interior probability map;
-5. refining cell edges;
-6. filling holes in detected regions;
-7. applying connected-component analysis;
-8. filtering instances according to object size;
-9. generating binary and instance-labeled masks.
+```mermaid
+flowchart TD
+    A[Load trained checkpoint] --> B[Read and normalize image sequence]
+    B --> C[Predict class probabilities]
+    C --> D[Threshold cell-interior probability]
+    D --> E[Refine predicted edges]
+    E --> F[Fill holes]
+    F --> G[Connected-component analysis]
+    G --> H[Filter objects by size]
+    H --> I[Optional watershed separation]
+    I --> J[Binary and instance-labeled masks]
+```
 
-The code also includes optional post-processing operations such as watershed-based separation, small-object removal, hole filling, and color-coded visualization of detected instances.
+Available operations include:
 
-## Evaluation Metric
+- probability thresholding;
+- edge refinement;
+- binary hole filling;
+- connected-component labeling;
+- small-object removal;
+- object-size filtering;
+- optional watershed-based separation;
+- color-coded instance visualization.
 
-The models were evaluated using the **SEG score**, an instance-level segmentation metric used in cell-tracking evaluation.
+---
 
-The metric considers whether each ground-truth cell is correctly detected and measures the overlap between the predicted and ground-truth instance masks. A score closer to 1 indicates better segmentation performance.
+## Evaluation
+
+The primary metric is the **SEG score**, an instance-level segmentation measure used in cell-tracking evaluation.
+
+The metric considers:
+
+1. whether a ground-truth cell is detected;
+2. whether a predicted component overlaps it sufficiently;
+3. the intersection-over-union between the matched ground-truth and prediction masks.
+
+A score closer to **1.0** indicates stronger instance-segmentation performance.
+
+---
 
 ## Results
 
-The following mean SEG scores were obtained on the 20-frame test set:
+### Quantitative Comparison
 
-### Example Segmentation Results
+| Rank | Architecture | Mean SEG | Difference from baseline |
+|---:|---|---:|---:|
+| 1 | **LSTM–ResU-Net** | **0.5607** | **+0.0545** |
+| 2 | LSTM–U-Net + Attention | 0.5171 | +0.0109 |
+| 3 | LSTM–U-Net baseline | 0.5062 | — |
 
-![Instance segmentation comparison across the ground-truth mask, baseline U-Net configuration, attention-based configuration, and residual configuration](images/segmentation_comparison.png)
+### Relative Improvement
 
-*Example instance-segmentation outputs on a test frame. Each color represents a separate predicted cell instance.*
+Compared with the baseline:
 
-| Model | Mean SEG score |
-|---|---:|
-| LSTM-U-Net baseline | 0.5062 |
-| LSTM-U-Net with Attention | 0.5171 |
-| LSTM-ResU-Net | **0.5607** |
+- attention improved mean SEG by approximately **2.2%**;
+- residual learning improved mean SEG by approximately **10.8%**.
 
-### Qualitative Observations
+These percentages describe the reported experiment only and should not be generalized beyond the current dataset and training configuration.
 
-**LSTM-U-Net baseline**
+---
 
-- detected a moderate number of cells;
-- provided a balance between detection rate and boundary quality;
-- did not always reproduce smooth or exact cell contours.
+## Qualitative Findings
 
-**LSTM-U-Net with Attention**
+### LSTM–U-Net
 
-- slightly improved the SEG score compared with the baseline;
-- produced smoother masks and more accurate boundaries;
-- missed more weak or low-contrast cells;
-- detected fewer instances than the other models.
+- detected a moderate number of cell instances;
+- offered a reasonable balance between detection and boundary quality;
+- did not consistently reproduce smooth or precise contours.
 
-**LSTM-ResU-Net**
+### LSTM–U-Net + Attention
 
-- achieved the highest SEG score;
-- detected the largest number of cells, including faint instances;
-- produced some masks with distorted shapes;
-- still required refinement of cell-boundary accuracy.
+- slightly improved the quantitative score;
+- generated smoother masks and more precise boundaries;
+- sometimes suppressed weak cells along with background features;
+- detected fewer low-contrast instances.
 
-A limitation shared by all three models was the tendency to merge two closely positioned cells into a single predicted instance.
+### LSTM–ResU-Net
 
-## Discussion
+- achieved the highest mean SEG score;
+- detected the largest number of cells;
+- recovered more faint instances;
+- occasionally produced distorted object shapes;
+- still required improved boundary refinement.
 
-Under the selected proof-of-concept conditions, LSTM-ResU-Net provided the strongest quantitative performance. Its residual blocks improved the detection of faint cells, which contributed to the highest SEG score.
+### Shared Failure Mode
 
-The attention model produced smoother and more precise boundaries but sometimes suppressed weak cells together with irrelevant background features. This reduced its detection rate even though its SEG score was slightly better than the baseline.
+All three models sometimes merged two closely positioned cells into a single predicted component.
 
-The extended architectures contain more parameters than the baseline and may require:
+---
 
-- more training iterations;
-- larger and more diverse datasets;
-- learning-rate optimization;
-- class-weight tuning;
-- regularization;
-- improved inference thresholds;
-- more advanced instance-separation post-processing.
+## Interpretation
 
-Because the dataset is relatively small and homogeneous, the reported results should be interpreted as a proof of concept rather than as fully optimized model performance.
+The comparison suggests that the spatial architecture meaningfully affects the performance of a temporally aware segmentation model.
 
-## Future Work
+Under the selected conditions:
 
-Potential extensions include:
+- **attention** improved spatial selectivity and boundary smoothness;
+- **residual learning** preserved more detectable cell information and improved sensitivity to faint objects;
+- the **residual model** produced the best overall SEG result;
+- no architecture fully solved separation of touching cells.
 
-- training the models for more iterations;
-- evaluating additional Cell Tracking Challenge datasets;
-- improving the separation of touching cells;
-- performing systematic hyperparameter tuning;
-- combining residual blocks and attention gates in a single architecture.
+Because the experiment uses a small, homogeneous dataset and only 1,000 training iterations, the results represent a **proof of concept**, not a definitive architecture ranking.
 
-## Requirements
+---
 
-The project was developed in Python 3 with TensorFlow and Keras in Google Colab.
-
-Main dependencies include:
+## Repository Structure
 
 ```text
-TensorFlow
-Keras
-NumPy
-OpenCV
-SciPy
-Pillow
-scikit-image
-Matplotlib
-Pandas
-Tifffile
-TQDM
-Imagecodecs
-Requests
+DL_Medical_Image_Analysis/
+├── README.md
+├── lstm_u_net_baseline.py
+├── lstm_u_net_+_attention.py
+├── lstm_resunet.py
+└── images/
+    └── segmentation_comparison.png
 ```
 
-A local virtual environment can be created with:
+The three Python files preserve complete experiment workflows exported from Google Colab, including model definitions, data handling, losses, training, inference, and post-processing sections.
+
+---
+
+## Getting Started
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/RoniDavidov56/DL_Medical_Image_Analysis.git
+cd DL_Medical_Image_Analysis
+```
+
+### Create an Environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate it on Windows:
+Windows:
 
 ```bash
 .venv\Scripts\activate
 ```
 
-Activate it on Linux or macOS:
+Linux or macOS:
 
 ```bash
 source .venv/bin/activate
 ```
 
-Install the main packages:
+### Install the Main Dependencies
 
 ```bash
-pip install tensorflow numpy opencv-python scipy pillow scikit-image matplotlib pandas tifffile tqdm imagecodecs requests
+pip install tensorflow numpy opencv-python scipy pillow \
+    scikit-image matplotlib pandas tifffile tqdm imagecodecs requests
 ```
 
-TensorFlow, CUDA, and cuDNN versions must be mutually compatible when GPU acceleration is used.
+For GPU execution, the TensorFlow, CUDA, cuDNN, and driver versions must be mutually compatible.
 
-## Important: Google Colab Export Structure
+---
 
-The uploaded `.py` files were exported from Google Colab notebooks. Each file contains notebook sections that were originally used to generate separate project modules, including:
+## Important: Colab Export Structure
+
+The current `.py` files were exported from Google Colab notebooks.
+
+They contain sections that originally generated separate modules such as:
 
 ```text
 Networks.py
@@ -330,50 +520,75 @@ Inference2D.py
 ColorMarks.py
 ```
 
-Some sections remain commented because the original notebooks used Jupyter commands such as:
+Some blocks remain commented because the notebooks used commands such as:
 
 ```python
 %%writefile Networks.py
 ```
 
-The exported files may also contain shell commands such as:
+The exports may also contain notebook shell commands such as:
 
 ```python
 !python train2D.py
 !pip install imagecodecs
 ```
 
-These commands work in Google Colab or Jupyter but are not valid inside a standard standalone Python script.
+These commands are valid in Colab or Jupyter, but not in a conventional standalone Python script.
 
-Therefore, the current files should primarily be treated as **Colab notebook exports and architecture records**. For conventional local execution, the relevant sections should be separated into their original Python modules and notebook shell commands should be executed from a terminal instead.
+### Recommended Execution Path
 
-## Recommended Repository Structure
+1. Open the selected model file in Google Colab.
+2. Restore or execute the relevant `%%writefile` sections.
+3. Confirm dataset and output paths.
+4. Install the required packages.
+5. Generate the modular Python files.
+6. Run the training script.
+7. Run inference using the saved checkpoint.
+8. Evaluate the generated masks with the SEG implementation.
+
+The repository currently serves primarily as:
+
+- an experiment record;
+- an architecture reference;
+- a reproducible Colab workflow;
+- a basis for future modular refactoring.
+
+---
+
+## Recommended Modular Structure
+
+A future production-style version could be organized as:
 
 ```text
 project/
+├── configs/
+│   └── experiment.yaml
 ├── models/
 │   ├── lstm_unet.py
 │   ├── lstm_attention_unet.py
 │   └── lstm_resunet.py
-├── data_handling.py
-├── losses.py
-├── params.py
-├── utils.py
+├── data/
+│   ├── readers.py
+│   ├── preprocessing.py
+│   └── augmentation.py
+├── metrics/
+│   └── seg.py
+├── postprocessing/
+│   └── instances.py
 ├── train.py
 ├── inference.py
 ├── evaluate.py
 ├── requirements.txt
-├── README.md
-└── data/
-    ├── images/
-    └── masks/
+└── README.md
 ```
 
-## Reproducibility Notes
+---
 
-For a fair comparison, the following settings should remain identical across all models:
+## Reproducibility Checklist
 
-- training, validation, and test frame ranges;
+For a fair architecture comparison, keep the following settings identical:
+
+- training, validation, and test time ranges;
 - random seed;
 - normalization method;
 - augmentation settings;
@@ -383,25 +598,73 @@ For a fair comparison, the following settings should remain identical across all
 - optimizer and learning rate;
 - number of iterations;
 - class weights;
+- validation frequency;
 - inference thresholds;
 - object-size filtering;
 - post-processing operations;
-- SEG metric implementation.
+- SEG implementation.
 
-## Known Limitations
+Changes to inference thresholds or post-processing may significantly alter instance-level results even when the trained model remains unchanged.
 
-- Several dataset paths and hyperparameters are hard-coded in the exported scripts.
-- The data-loading workflow expects a specific metadata and folder structure.
-- Some SciPy namespace imports are deprecated and may require updating.
-- Stateful ConvLSTM layers require correct state resetting between independent sequences.
-- `NCHW` execution may require a compatible GPU; `NHWC` is generally safer on CPU.
-- The experiment uses one relatively small and homogeneous cell dataset.
-- The models were trained for only 1,000 iterations.
-- Closely touching cells may be merged into one predicted mask.
-- The reported architectures were not exhaustively optimized.
+---
+
+## Limitations
+
+- Only one relatively small and homogeneous dataset was evaluated.
+- The models were trained for 1,000 iterations.
+- The architectures were not exhaustively tuned.
+- Several paths and parameters are hard-coded in the exported workflows.
+- Touching cells may be merged into one predicted instance.
+- The attention model may suppress weak cell signals.
+- The residual model may produce irregular object shapes.
+- Some SciPy namespace imports are deprecated.
+- Stateful ConvLSTM layers require correct resetting between independent sequences.
+- `NCHW` execution may require compatible GPU support; `NHWC` is generally safer on CPU.
+- Results may vary when random seeds and deterministic operations are not fixed.
+
+---
+
+## Future Work
+
+Potential extensions include:
+
+- training for substantially more iterations;
+- evaluating additional Cell Tracking Challenge datasets;
+- performing systematic hyperparameter optimization;
+- tuning class weights and probability thresholds;
+- improving contour supervision;
+- separating touching cells with stronger watershed or distance-map methods;
+- combining residual blocks and attention gates;
+- testing Dice, focal, Tversky, or compound losses;
+- using multi-scale supervision;
+- reporting repeated-run mean and standard deviation;
+- refactoring the Colab exports into reusable modules;
+- adding configuration files, tests, and automated evaluation.
+
+---
+
+## Responsible Use
+
+This repository is intended for **research and educational use**.
+
+It is a proof-of-concept cell-segmentation experiment and has not been validated for clinical diagnosis, treatment decisions, or deployment in a regulated medical environment.
+
+---
 
 ## Attribution and License
 
-Parts of the implementation preserve notices and workflow conventions from the original code base. Retain all existing attribution notices when modifying or redistributing the code.
+Parts of the implementation preserve notices and workflow conventions from an earlier code base. Existing attribution notices should remain intact when the code is modified or redistributed.
 
-No explicit license was identified in the supplied files. Before publishing or redistributing the repository, verify the license of the original implementation and add an appropriate `LICENSE` file. Without an explicit license, reuse and redistribution rights are not automatically granted.
+No explicit repository license is currently specified. Before reuse or redistribution:
+
+1. verify the license of the original implementation;
+2. verify the terms of the Cell Tracking Challenge dataset;
+3. add an appropriate `LICENSE` file to this repository.
+
+---
+
+<div align="center">
+
+### Temporal context. Spatial precision. Instance-aware evaluation.
+
+</div>
